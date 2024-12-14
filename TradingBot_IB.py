@@ -1,4 +1,4 @@
-# Imports
+#Imports
 import ibapi
 from ibapi.client import EClient
 from ibapi.wrapper import EWrapper
@@ -12,103 +12,134 @@ import math
 from datetime import datetime, timedelta
 import threading
 import time
-orderId = 6
 #Vars
+orderId = 1
+# Letters in alphabet
+letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"]
+bought_stocks =[]
+globalSymbol = "AAA"
+globalBarrier = 1
 
 #Class for Interactive Brokers Connection
-class IBApi(EWrapper, EClient):
+class IBApi(EWrapper,EClient):
+    orderNumber = 15000
+    f = open("./output/trades.txt", 'a')
     def __init__(self):
         EClient.__init__(self, self)
-    # Historical Backtest Data
-    def historicalData(self, reqId, bar):
-        try:
-            bot.on_bar_update(reqId, bar, False)
-        except Exception as e:
-            print(e)
-    # On Realtime Var after historical data finished
-    def historicalDataUpdate(self, reqId, bar):
-        try:
-            bot.on_bar_update(reqId, bar, True)
-        except Exception as e:
-            print(e)
-    # On Historical Data End
-    def historicalDataEnd(self, reqId, start, end):
-        print(reqId)
-    # Get next order ID we can use
     def nextValidId(self, nextorderId):
+        global orderId
         orderId = nextorderId
-        #global orderId = nextorderId
-    # Listen for real time bars
-    def realtimeBar(self, reqId, time, open, high, low, close, volume, wap, count):
-        super().realtimeBar(self, reqId, time, open, high, low, close, volume, wap)
+
+    def realtimeBar(self, reqId, time: int, open_: float, high: float, low: float, close: float,
+                    volume, wap, count: int):
+        super().realtimeBar(reqId, time, open_, high, low, close, volume, wap, count)
+        global orderId
+        orderId+=1
         try:
-            bot.on_bar_update(reqId, time, open, high, low, close, volume, wap, count)
+            print("RealTimeBar. TickerId:", reqId, close)
+            if close < globalBarrier:
+                contract = Contract()
+                contract.symbol = globalSymbol
+                contract.secType = "STK"
+                contract.exchange = "SMART"
+                contract.primaryExchange = "ISLAND"
+                contract.currency = "USD"
+                orderTest = Order()
+                # parent.orderId = parentOrderId
+                orderTest.orderType = "MKT"
+                orderTest.action = "BUY"
+                orderTest.totalQuantity = 1
+                self.placeOrder(orderId, contract, orderTest)
+                f.write("Buy " + globalSymbol + " at " + str(close))
+            else:
+                contract = Contract()
+                contract.symbol = globalSymbol
+                contract.secType = "STK"
+                contract.exchange = "SMART"
+                contract.primaryExchange = "ISLAND"
+                contract.currency = "USD"
+                orderTest = Order()
+                # parent.orderId = parentOrderId
+                orderTest.orderType = "MKT"
+                orderTest.action = "SELL"
+                orderTest.totalQuantity = 1
+                self.placeOrder(orderId, contract, orderTest)
+            print("Order number", orderId)
+            print("Ticker", globalSymbol)
+            print("Barrier", globalBarrier)
+            orderId += 1
         except Exception as e:
             print(e)
-    def error(self, id, errorCode, errorMsg, advancedOrderRejectJson):
+
+    def error(self, id, errorCode, errorMsg, advancedOrderRejection=""):
         print(errorCode)
         print(errorMsg)
-
-# Bar Object
+#Bar Object
 class Bar:
     open = 0
     low = 0
     high = 0
     close = 0
     volume = 0
-    date = ''
+    date = datetime.now()
     def __init__(self):
         self.open = 0
         self.low = 0
         self.high = 0
         self.close = 0
         self.volume = 0
-        self.date = ''
-
-#Bot logic
+        self.date = datetime.now()
+#Bot Logic
 class Bot:
     ib = None
     barsize = 1
     currentBar = Bar()
     bars = []
     reqId = 1
-    global orderId
     smaPeriod = 50
+    identify = 2200
     symbol = ""
-    initialbartime = datetime.now().astimezone(pytz.timezone('America/New_York'))
+    close = []
     def __init__(self):
-        # Connect to IB on innit
+        #Connect to IB on init
         self.ib = IBApi()
-        self.ib.connect("127.0.0.1", 7497, 1)
+        self.ib.connect("127.0.0.1", 7497,1)
         ib_thread = threading.Thread(target=self.run_loop, daemon=True)
         ib_thread.start()
         time.sleep(1)
         currentBar = Bar()
-        # Get symbol info
-        self.symbol = input("Enter the symbol you want to trade: ")
-        # Get bar size
-        self.barsize = input("Enter the barsize you want to trade in minutes: ")
+        #Get symbol info
+        global globalSymbol
+        global globalBarrier
+        global orderId
+        globalSymbol = input("Enter the symbol you want to trade : ")
+        #Get bar size
+        globalBarrier = float(input("Enter the value about which you would like to trade : "))
+        orderId = int(input("Enter the order id you want to start trading from : "))
+        print("original ticker", globalSymbol)
+        print("original barrier", globalBarrier)
+        print("original orderId", orderId)
         mintext = " min"
         if (int(self.barsize) > 1):
             mintext = " mins"
-        queryTime = (datetime.now().astimezone(pytz.timezone('America/New_York'))-timedelta(days=1)).replace(hour=16, minute=0, second=0, microsecond=0).strftime("%Y%m%d %H:%M:%S")
-        # Create our ID Contract Object
+        #self.identify = self.ib.reqIds(-1)
         contract = Contract()
-        contract.symbol = self.symbol.upper()
+        contract.symbol = globalSymbol.upper()
         contract.secType = "STK"
         contract.exchange = "SMART"
         contract.currency = "USD"
-        self.ib.reqHistoricalData(self.reqId, contract, "", "2 D", str(self.barsize)+mintext, "TRADES", 1, 1, True, [])
-        self.ib.reqIds(-1)
-        # Request Market Data
-        self.ib.reqRealTimeBars(0, contract, 5, "TRADES", 1, [])
-    # Listen to socket in separate thread
+        print("before req time bars")
+        self.ib.reqRealTimeBars(self.identify, contract, 5, "MIDPOINT", 0, [])
+        print("after req time bars")
+
+
+    #Listen to socket in seperate thread
     def run_loop(self):
-            self.ib.run()
-    # Bracket Order Setup
+        self.ib.run()
+    #Bracet Order Setup
     def bracketOrder(self, parentOrderId, action, quantity, profitTarget, stopLoss):
-        # Initial Entry
-        # Create our IB Contract Object
+        #Initial Entry
+        #Create our IB Contract Object
         contract = Contract()
         contract.symbol = self.symbol.upper()
         contract.secType = "STK"
@@ -127,79 +158,75 @@ class Bot:
         profitTargetOrder.orderType = "LMT"
         profitTargetOrder.action = "SELL"
         profitTargetOrder.totalQuantity = quantity
-        profitTargetOrder.lmtPrice = round(profitTarget, 2)
+        profitTargetOrder.lmtPrice = round(profitTarget,2)
+        profitTargetOrder.parentId = parentOrderId
         profitTargetOrder.transmit = False
         # Stop Loss
         stopLossOrder = Order()
-        stopLossOrder.orderId = parent.orderId + 2
+        stopLossOrder.orderId = parent.orderId+2
         stopLossOrder.orderType = "STP"
         stopLossOrder.action = "SELL"
         stopLossOrder.totalQuantity = quantity
-        stopLossOrder.auxPrice = round(stopLoss, 2)
+        stopLossOrder.parentId = parentOrderId
+        stopLossOrder.auxPrice = round(stopLoss,2)
         stopLossOrder.transmit = True
 
         bracketOrders = [parent, profitTargetOrder, stopLossOrder]
         return bracketOrders
-    # Pass realtime bar data back to our bot object
-    def on_bar_update(self, reaId, bar, realtime):
-        global orderId
-        # Historical data to catch up
-        if (realtime == False):
-            self.bars.append(bar)
-        else:
-            bartime = datetime.strptime(bar.date, "%Y%m%d %H:%M:%S").astimezone(pytz.timezone('America/New_York'))
-            minutes_diff = (bartime-self.initialbartime).total_seconds() / 60.0
-            self.currentBar.date = bartime
-            # On Bar Close
-            if (minutes_diff > 0 and math.floor(minutes_diff) % self.barsize == 0):
-                # Entry - If we have a higher high, a higher low and we cross the 50 SMA Buy
-                #1) SMA
-                closes = []
-                for entry in self.bars:
-                    closes.append(bar.close)
-                self.close_array = pd.Series(np.asarray(closes))
-                self.sma = ta.trend.sma(self.close_array, self.smaPeriod, True)
-                print("SMA : " + str(self.sma[len(self.sma)-1]))
-                #2) Calculate higher highs and lower lows
-                lastLow = self.bars[len(self.bars)-1].low
-                lastHigh = self.bars[len(self.bars) - 1].high
-                lastClose = self.bars[len(self.bars) - 1].close
-                lastBar = self.bars[len(self.bars) - 1].bar
-                # Check criteria
-                if (bar.close > lastHigh
-                    and self.currentBar.low > lastLow
-                    and bar.close > str(self.sma[len(self.sma)-1])
-                    and lastClose < str(self.sma[len(self.sma)-2])):
-                    # Bracket Order 2% Profit Target 1% Stop Loss
-                    profitTarget = bar.close*1.02
-                    stopLoss = bar.close*0.99
-                    quantity = 1
-                    bracket = self.bracketOrder(orderId, "BUY", quantity, profitTarget, stopLoss)
-                    contract = Contract()
-                    contract.symbol = self.symbol.upper()
-                    contract.secType = "STK"
-                    contract.exchange = "SMART"
-                    contract.currency = "USD"
-                    #Place Bracket Order
-                    for o in bracket:
-                        o.ocaGroup = "OCA_"+str(orderId)
-                        o.ocaType = 2
-                        self.ib.placeOrder(o.orderId, contract, o)
-                    orderId += 3
 
-                #Bar closed append
-                self.currentBar.close = bar.close
-                if (self.currentBar.date != lastBar.date):
-                    print("New bar!")
-                    self.bars.append(self.currentBar)
-                self.currentBar.open = bar.open
-        # Build realtime bar
-        if (self.currentBar.open == 0):
-            self.currentBar.open == bar.open
-        if (self.currentBar.high == 0 or bar.high > self.currentBar.high):
-            self.currentBar.high = bar.high
-        if (self.currentBar.low == 0 or bar.low < self.currentBar.low):
-            self.currentBar.low = bar.low
+    # Bracket Order Setup
+    def bracketOrderOne(self, parentOrderId, action, quantity):
+        # Initial Entry
+        # Create our IB Contract Object
+        contract = Contract()
+        contract.symbol = self.symbol.upper()
+        contract.secType = "STK"
+        contract.exchange = "SMART"
+        contract.currency = "USD"
+        # Create Parent Order / Initial Entry
+        parent = Order()
+        #parent.orderId = parentOrderId
+        parent.orderType = "MKT"
+        parent.action = action
+        parent.totalQuantity = quantity
+        parent.transmit = False
+
+        bracketOrder = parent
+        return
+
+    #Pass realtime bar data back to our bot object
+    def on_bar_update(self, reqId, close,realtime):
+        #print("test")
+        global orderId
+        #Historical Data to catch up
+        if (realtime == False):
+            #print("test realtime false")
+            #self.bars.append(close)
+            print("false")
+        else:
+            print(close)
+            print("in on bar update")
+
+            # Check Criteria
+            quantity = 1
+            contract = Contract()
+            contract.symbol = self.symbol
+            contract.secType = "STK"
+            contract.exchange = "SMART"
+            contract.primaryExchange = "ISLAND"
+            contract.currency = "USD"
+            orderTest = Order()
+            # parent.orderId = parentOrderId
+            orderTest.orderType = "MKT"
+            orderTest.action = "BUY"
+            orderTest.totalQuantity = 1
+            self.currentBar.close = bar.close
+            print("New bar!")
+            self.bars.append(self.currentBar)
+            self.currentBar = Bar()
+            self.currentBar.open = bar.open
+
+
 
 
 
