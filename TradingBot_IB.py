@@ -23,7 +23,7 @@ globalBarrier = 1
 #Class for Interactive Brokers Connection
 class IBApi(EWrapper,EClient):
     orderNumber = 15000
-    f = open("./output/trades.txt", 'a')
+    #f = open("./output/trades.txt", 'a')
     def __init__(self):
         EClient.__init__(self, self)
     def nextValidId(self, nextorderId):
@@ -50,7 +50,7 @@ class IBApi(EWrapper,EClient):
                 orderTest.action = "BUY"
                 orderTest.totalQuantity = 1
                 self.placeOrder(orderId, contract, orderTest)
-                f.write("Buy " + globalSymbol + " at " + str(close))
+                #f.write("Buy " + globalSymbol + " at " + str(close))
             else:
                 contract = Contract()
                 contract.symbol = globalSymbol
@@ -116,9 +116,9 @@ class Bot:
         #Get bar size
         globalBarrier = float(input("Enter the value about which you would like to trade : "))
         orderId = int(input("Enter the order id you want to start trading from : "))
-        print("original ticker", globalSymbol)
-        print("original barrier", globalBarrier)
-        print("original orderId", orderId)
+        #print("original ticker", globalSymbol)
+        #print("original barrier", globalBarrier)
+        #print("original orderId", orderId)
         mintext = " min"
         if (int(self.barsize) > 1):
             mintext = " mins"
@@ -128,9 +128,14 @@ class Bot:
         contract.secType = "STK"
         contract.exchange = "SMART"
         contract.currency = "USD"
-        print("before req time bars")
+        #orderTest = Order()
+        # parent.orderId = parentOrderId
+        #orderTest.orderType = "MKT"
+        #orderTest.action = "BUY"
+        #orderTest.totalQuantity = 1
+        #self.ib.placeOrder(orderId, contract, orderTest)
         self.ib.reqRealTimeBars(self.identify, contract, 5, "MIDPOINT", 0, [])
-        print("after req time bars")
+
 
 
     #Listen to socket in seperate thread
