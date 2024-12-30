@@ -1,5 +1,8 @@
 #Imports
+from lib2to3.main import diff_texts
+
 import ibapi
+import talib
 from ibapi.client import EClient
 from ibapi.wrapper import EWrapper
 from ibapi.contract import Contract
@@ -15,61 +18,91 @@ import time
 #Vars
 orderId = 1
 # Letters in alphabet
-letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"]
-bought_stocks =[]
-globalSymbol = "AAA"
 globalBarrier = 1
+
 
 #Class for Interactive Brokers Connection
 class IBApi(EWrapper,EClient):
     orderNumber = 15000
-    #f = open("./output/trades.txt", 'a')
+    closingValues = np.zeros(720)
+    smaValues = np.zeros(720)
+    closingValuesIndex = 0
+    dates = np.empty(720, dtype=object)
     def __init__(self):
         EClient.__init__(self, self)
     def nextValidId(self, nextorderId):
         global orderId
         orderId = nextorderId
 
-    def realtimeBar(self, reqId, time: int, open_: float, high: float, low: float, close: float,
+    def realtimeBar(self, reqId, time: int, open: float, high: float, low: float, close: float,
                     volume, wap, count: int):
-        super().realtimeBar(reqId, time, open_, high, low, close, volume, wap, count)
-        global orderId
-        orderId+=1
+        super().realtimeBar(reqId, time, open, high, low, close, volume, wap, count)
         try:
-            print("RealTimeBar. TickerId:", reqId, close)
-            if close < globalBarrier:
-                contract = Contract()
-                contract.symbol = globalSymbol
-                contract.secType = "STK"
-                contract.exchange = "SMART"
-                contract.primaryExchange = "ISLAND"
-                contract.currency = "USD"
-                orderTest = Order()
+            print("TickerId:", reqId, "close:", close, "open:", open, "high:", high, "low:", low, "volume:", volume, "wap:", wap)
+
+            #if close < globalBarrier:
+            #    contract = Contract()
+            #    contract.symbol = globalSymbol
+            #    contract.secType = "OPT"
+            #    contract.exchange = "SMART"
+            #   contract.primaryExchange = "ISLAND"
+            #   contract.currency = "USD"
+            #    orderTest = Order()
+            #    # parent.orderId = parentOrderId
+            #    orderTest.orderType = "MKT"
+            #    orderTest.action = "BUY"
+            #    orderTest.totalQuantity = 1
+            #    self.placeOrder(orderId, contract, orderTest)
+            #    #f.write("Buy " + globalSymbol + " at " + str(close))
+            #else:
+            #    contract = Contract()
+            #    contract.symbol = globalSymbol
+            #    contract.secType = "OPT"
+            #    contract.exchange = "SMART"
+            #    contract.primaryExchange = "ISLAND"
+            #    contract.currency = "USD"
+            #    orderTest = Order()
                 # parent.orderId = parentOrderId
-                orderTest.orderType = "MKT"
-                orderTest.action = "BUY"
-                orderTest.totalQuantity = 1
-                self.placeOrder(orderId, contract, orderTest)
-                #f.write("Buy " + globalSymbol + " at " + str(close))
-            else:
-                contract = Contract()
-                contract.symbol = globalSymbol
-                contract.secType = "STK"
-                contract.exchange = "SMART"
-                contract.primaryExchange = "ISLAND"
-                contract.currency = "USD"
-                orderTest = Order()
-                # parent.orderId = parentOrderId
-                orderTest.orderType = "MKT"
-                orderTest.action = "SELL"
-                orderTest.totalQuantity = 1
-                self.placeOrder(orderId, contract, orderTest)
-            print("Order number", orderId)
-            print("Ticker", globalSymbol)
-            print("Barrier", globalBarrier)
-            orderId += 1
+            #    orderTest.orderType = "MKT"
+            #    orderTest.action = "SELL"
+            #    orderTest.totalQuantity = 1
+            #    self.placeOrder(orderId, contract, orderTest)
+            #print("Order number", orderId)
+            #print("Ticker", globalSymbol)
+            #print("Barrier", globalBarrier)
+            #self.reqIds(-1)
+            self.shiftArrayLeftOne(720)
+            self.closingValues[719] = close
+            self.smaValues[719] = self.findSMA(720)
+            print(self.closingValues)
+            print(self.smaValues)
+            #print(self.sma)
         except Exception as e:
             print(e)
+
+    def headTimestamp(self, reqId, headTimestamp):
+        #print("got in")
+        print(reqId, headTimestamp)
+
+    def historicalData(self, reqId: int, bar):
+        self.closingValues[self.closingValuesIndex] = bar.close
+        self.dates[self.closingValuesIndex] = bar.date
+        self.closingValuesIndex += 1
+    def shiftArrayLeftOne(self, length):
+        for i in range(0, length):
+            if i == (length - 1):
+                self.closingValues[i] = 0.0
+                self.smaValues[i] = 0.0
+            else:
+                self.closingValues[i] = self.closingValues[i+1]
+                self.smaValues[i] = self.smaValues[i+1]
+
+    def findSMA(self, length):
+        returnValue = 0.0
+        for i in range(0, length):
+            returnValue += self.closingValues[i]
+        returnValue /= length
+        return returnValue
 
     def error(self, id, errorCode, errorMsg, advancedOrderRejection=""):
         print(errorCode)
@@ -115,7 +148,7 @@ class Bot:
         globalSymbol = input("Enter the symbol you want to trade : ")
         #Get bar size
         globalBarrier = float(input("Enter the value about which you would like to trade : "))
-        orderId = int(input("Enter the order id you want to start trading from : "))
+        #orderId = int(input("Enter the order id you want to start trading from : "))
         #print("original ticker", globalSymbol)
         #print("original barrier", globalBarrier)
         #print("original orderId", orderId)
@@ -134,8 +167,21 @@ class Bot:
         #orderTest.action = "BUY"
         #orderTest.totalQuantity = 1
         #self.ib.placeOrder(orderId, contract, orderTest)
-        self.ib.reqRealTimeBars(self.identify, contract, 5, "MIDPOINT", 0, [])
-
+        self.ib.reqIds(-1)
+        #print(orderId)
+        #self.ib.reqRealTimeBars(self.identify, contract, 5, "MIDPOINT", 0, [])
+        #self.ib.reqHeadTimeStamp(1, contract , "ASK", 1, 2)
+        self.ib.reqHistoricalData(4102, contract, "", "3600 S", "5 secs", "TRADES", 1, 1, True, [])
+        time.sleep(2)
+        #print(self.ib.closingValues)
+        self.ib.sma = talib.SMA(self.ib.closingValues, timeperiod=720)
+        print(self.ib.closingValues)
+        print(self.ib.dates)
+        print(self.ib.smaValues)
+        print(self.ib.closingValues.size)
+        print(self.ib.dates.size)
+        print(self.ib.smaValues.size)
+        self.ib.reqRealTimeBars(3001, contract, 5, "TRADES", 0, [])
 
 
     #Listen to socket in seperate thread
@@ -147,7 +193,7 @@ class Bot:
         #Create our IB Contract Object
         contract = Contract()
         contract.symbol = self.symbol.upper()
-        contract.secType = "STK"
+        contract.secType = "OPT"
         contract.exchange = "SMART"
         contract.currency = "USD"
         # Create Parent Order / Initial Entry
@@ -185,7 +231,7 @@ class Bot:
         # Create our IB Contract Object
         contract = Contract()
         contract.symbol = self.symbol.upper()
-        contract.secType = "STK"
+        contract.secType = "OPT"
         contract.exchange = "SMART"
         contract.currency = "USD"
         # Create Parent Order / Initial Entry
@@ -216,7 +262,7 @@ class Bot:
             quantity = 1
             contract = Contract()
             contract.symbol = self.symbol
-            contract.secType = "STK"
+            contract.secType = "OPT"
             contract.exchange = "SMART"
             contract.primaryExchange = "ISLAND"
             contract.currency = "USD"
@@ -234,6 +280,10 @@ class Bot:
 
 
 
+print("Before bot")
 
 #Start Bot
 bot = Bot()
+
+print("after bot")
+
